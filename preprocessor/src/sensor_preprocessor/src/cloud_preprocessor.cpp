@@ -12,7 +12,7 @@ using namespace std;
 
 float Map_W = 20;
 float Map_B = 20;
-float Map_resolution = 0.1;
+float Map_resolution = 0.05;
 
 ros::Publisher _pub_cloud, _pub_normal, _pub_don;
 image_transport::Publisher _pub_img;
@@ -22,7 +22,7 @@ bool image_ready = false;
 void imageCallback(const sensor_msgs::ImageConstPtr& image_msg)
 {
     img_in_msg = image_msg;
-    // cout << "image in" << endl;
+    cout << "image in" << endl;
 }
 
 pcl::PointCloud<pcl::PointNormal>::Ptr calculateSurfaceNormal(pcl::PointCloud<pcl::PointXYZ>::Ptr input_point,
@@ -85,7 +85,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filter(pcl::PointCloud<pcl::PointXYZ>:
 
 void callback_cloud(const sensor_msgs::PointCloud2ConstPtr &cloud_in)
 {
-    // cout << "cloud in" << endl;
+    cout << "cloud in" << endl;
     sensor_msgs::ImageConstPtr mapped_img_msg = img_in_msg;
 
     // pcl::PointCloud<pcl::PointXYZ> pcl_cloud_in;
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
 
     image_transport::ImageTransport it(node);
     image_transport::Subscriber sub_raw = it.subscribe("/kinect2/qhd/image_color", 1, imageCallback);
-    ros::Subscriber sub_cloud = node.subscribe<sensor_msgs::PointCloud2>("/mapping_nodelet/pointcloud", 1, callback_cloud);
+    ros::Subscriber sub_cloud = node.subscribe<sensor_msgs::PointCloud2>("/mapping_nodelet/pointcloud_cut", 1, callback_cloud);
     
     // _pub_cloud = node.advertise<sensor_msgs::PointCloud2> ("/terrain_classifier/preprocessed/cloud", 1);
     // _pub_normal = node.advertise<sensor_msgs::PointCloud2> ("/terrain_classifier/preprocessed/normal", 1);

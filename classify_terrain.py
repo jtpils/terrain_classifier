@@ -18,7 +18,7 @@ from centauro_locomotion_msgs.msg import TerrainClassMap
 
 Map_W = 20
 Map_B = 20
-Map_resolution = 0.1
+Map_resolution = 0.05
 Map_r = Map_W/Map_resolution
 Map_c = Map_B/Map_resolution
 
@@ -125,6 +125,8 @@ def classify_features(features_map, rgb_img):
             label_pred = label_pred_reshaped[row, col]
             
             if features_map[row, col, 0] != -1:
+                if label_pred == 5: #narrow passage
+                    cv2.circle(rgb_img, (col, row), 3, (255, 255, 0), -1)                
                 if label_pred == 4: #stair
                     cv2.circle(rgb_img, (col, row), 3, (255, 255, 0), -1)
                 if label_pred == 3: #obs
@@ -162,17 +164,17 @@ def build_terrain_map(label_img, resolution, robot_x, robot_y, cloud, trans_to_m
     terrain_map.num_cells_y = label_img.shape[0]
     terrain_map.resolution = resolution
 
-    terrain_map.origin_x = robot_x + 0.5 * terrain_map.num_cells_x * resolution
-    terrain_map.origin_y = robot_y + 0.5 * terrain_map.num_cells_y * resolution
+    terrain_map.origin_x = robot_x - 0.5 * terrain_map.num_cells_x * resolution
+    terrain_map.origin_y = robot_y - 0.5 * terrain_map.num_cells_y * resolution
 
-    terrain_map.terrain_class = np.full(label_img.shape[1]*label_img.shape[0], np.nan)
+    terrain_map.terrain_class = np.full(label_img.shape[1]*label_img.shape[0], 0)
 
     for row in range(label_img.shape[0]):
         for col in range(label_img.shape[1]):
             semantic_v = label_img[row, col]
 
             if semantic_v != 0:
-                index = row * label_img.shape[0] + col
+                index = col * label_img.shape[1] + row
                 terrain_map.terrain_class[index] = semantic_v
 
     return terrain_map
@@ -190,10 +192,15 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
 
     print('-------------------------------------------------------')
     print('message in', cloud_msg.header.stamp, image_msg.header.stamp)
-    translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', cloud_msg.header.frame_id, rospy.Time(0))
-    trans_to_kinect = TF_L.fromTranslationRotation(translation, rotation)
-    translation_tomap,rotation_tomap = TF_L.lookupTransform('map', cloud_msg.header.frame_id, rospy.Time(0))
-    print(translation_tomap)
+
+    try:
+        translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+        trans_to_kinect = TF_L.fromTranslationRotation(translation, rotation)
+        translation_tomap,rotation_tomap = TF_L.lookupTransform('map', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+        print(translation_tomap)
+    except:
+        print('tf failed')
+        return
     trans_to_map = TF_L.fromTranslationRotation(translation_tomap, rotation_tomap)
 
     # ----------------- 1. get point cloud
@@ -255,7 +262,12 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     show_img(label_ground, 'label_test', 10)
 
     terrain_map = build_terrain_map(label_ground, Map_resolution, translation_tomap[0], translation_tomap[1], cloud_in_cam, trans_to_map)
+    # header = std_msgs.msg.Header()
+    # header.stamp = rospy.Time.now()   
+    # header.frame_id = 'map' 
+    terrain_map.header = cloud_msg.header
     terrainmap_pub.publish(terrain_map)
+    print('####################################################')
 
     # #header
     header = std_msgs.msg.Header()
@@ -286,7 +298,7 @@ def main(args):
     # info_sub = message_filters.Subscriber('camera_info', CameraInfo)
 
     # ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub], 1, 500)
-    ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub, nromal_sub, roughness_sub], 1, 500)
+    ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub, nromal_sub, roughness_sub], 1, 10000)
     ts.registerCallback(callback)
 
     pcl_pub = rospy.Publisher('cloud_test', PointCloud2, queue_size=1)
