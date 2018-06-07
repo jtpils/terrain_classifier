@@ -1,0 +1,2 @@
+centauro_locomotion_msgs:ros_websocket_bridge:sensor_preprocessor
+-DCATKIN_DEVEL_PREFIX=/home/xi/workspace/terrain_classifier/preprocessor/devel -DCMAKE_INSTALL_PREFIX=/home/xi/workspace/terrain_classifier/preprocessor/install -G Unix Makefiles

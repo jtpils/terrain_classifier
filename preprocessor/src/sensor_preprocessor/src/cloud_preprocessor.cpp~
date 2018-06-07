@@ -1,0 +1,98 @@
+#include "ros/ros.h"
+#include "pcl_ros/point_cloud.h"
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/voxel_grid.h>
+
+
+using namespace std;
+
+ros::Publisher _pub, _pub_kinect;
+
+void publish(ros::Publisher pub, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud)
+{
+    sensor_msgs::PointCloud2 pointlcoud2;
+    pcl::toROSMsg(*cloud, pointlcoud2);
+
+    pub.publish(pointlcoud2);
+}
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filter(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud)
+{
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr  cloud_passthrough (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    cout << "before filter  " << input_cloud->points.size() << endl;
+
+    pcl::PassThrough<pcl::PointXYZRGB> pass;
+    pass.setInputCloud (input_cloud);
+    pass.setFilterFieldName ("x");
+    pass.setFilterLimits (-8, 8);
+    pass.filter (*cloud_passthrough);
+    // cout << "after x filter  " << cloud_passthrough->points.size() << endl;
+
+    pass.setInputCloud (cloud_passthrough);
+    pass.setFilterFieldName ("y");
+    pass.setFilterLimits (-8, 8);
+    pass.filter (*cloud_passthrough);
+    // cout << "after y filter  " << cloud_passthrough->points.size() << endl;
+
+    pass.setInputCloud (cloud_passthrough);
+    pass.setFilterFieldName ("z");
+    pass.setFilterLimits (-8, 8);
+    pass.filter (*cloud_passthrough);
+
+    pcl::VoxelGrid<pcl::PointXYZRGB> sor;
+    sor.setInputCloud (cloud_passthrough);
+    sor.setLeafSize (0.08f, 0.08f, 0.08f);
+    sor.filter (*cloud_passthrough);
+
+    return cloud_passthrough;
+}
+
+void callback_cloud(const sensor_msgs::PointCloud2ConstPtr &cloud_in)
+{
+    pcl::PointCloud<pcl::PointXYZRGB> pcl_cloud_in;
+    pcl::fromROSMsg(*cloud_in, pcl_cloud_in);
+    
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr  pcl_cloud_in_ptr      (new pcl::PointCloud<pcl::PointXYZRGB>(pcl_cloud_in));
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr  cloud_filtered        (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    cloud_filtered = cloud_filter(pcl_cloud_in_ptr);
+    publish(_pub, cloud_filtered);
+    // _pub.publish(*cloud_filtered);
+}
+
+void callback_kinect_cloud(const sensor_msgs::PointCloud2ConstPtr &cloud_in)
+{
+    pcl::PointCloud<pcl::PointXYZRGB> pcl_cloud_in;
+    pcl::fromROSMsg(*cloud_in, pcl_cloud_in);
+    
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr  pcl_cloud_in_ptr      (new pcl::PointCloud<pcl::PointXYZRGB>(pcl_cloud_in));
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr  cloud_filtered        (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    pcl::VoxelGrid<pcl::PointXYZRGB> sor;
+    sor.setInputCloud (pcl_cloud_in_ptr);
+    sor.setLeafSize (0.08f, 0.08f, 0.08f);
+    sor.filter (*cloud_filtered);
+
+    publish(_pub_kinect, cloud_filtered);
+    // _pub.publish(*cloud_filtered);
+}
+
+int main(int argc, char **argv)
+{
+    ros::init(argc, argv, "cloud_preprocessor");
+    ros::NodeHandle nh;
+    std::string topic = nh.resolveName("preprocessed_cloud");
+    std::string topic_kinect = nh.resolveName("preprocessed_kinect");
+
+    ros::Subscriber sub_cloud = nh.subscribe<sensor_msgs::PointCloud2>("/mapping_nodelet/pointcloud", 1, callback_cloud);
+    ros::Subscriber sub_kinect = nh.subscribe<sensor_msgs::PointCloud2>("/kinect2/sd/points", 1, callback_kinect_cloud);
+    _pub = nh.advertise<sensor_msgs::PointCloud2> (topic, 1);
+    _pub_kinect = nh.advertise<sensor_msgs::PointCloud2> (topic_kinect, 1);
+
+    ros::spin();
+    // and just publish the object directly
+    // pub.publish(cloud);
+
+    return 0;
+}

@@ -1,0 +1,8 @@
+prefix=/home/xi/workspace/terrain_classifier/preprocessor/devel
+
+Name: preprocessor
+Description: Description of preprocessor
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/xi/workspace/terrain_classifier/preprocessor/devel/lib 
+Requires: 

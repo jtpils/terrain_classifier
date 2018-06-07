@@ -1,0 +1,8 @@
+prefix=/home/xi/workspace/terrain_classifier/preprocessor/devel
+
+Name: centauro_locomotion_msgs
+Description: Description of centauro_locomotion_msgs
+Version: 0.0.1
+Cflags: -I/home/xi/workspace/terrain_classifier/preprocessor/devel/include
+Libs: -L/home/xi/workspace/terrain_classifier/preprocessor/devel/lib 
+Requires: message_runtime

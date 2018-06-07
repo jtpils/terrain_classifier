@@ -1,0 +1,14 @@
+<launch>
+
+  <arg name="bag_path"/>
+  <arg name="image_prefix"/>
+
+
+  <node pkg="rosbag" type="play" name="rosbag" required="true" args="-d 2 $(arg bag_path)"/>
+  <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true"
+     output="screen" cwd="ROS_HOME">
+    <remap from="image" to="/kinect2/qhd/image_color"/>
+    <param name="filename_format" value="$(arg image_prefix)" type="string"/>
+    <param name="sec_per_frame" value="4.0" type="double" />
+  </node>
+</launch>

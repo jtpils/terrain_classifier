@@ -1,0 +1,8 @@
+prefix=/home/xi/workspace/terrain_classifier/preprocessor/devel
+
+Name: ros_websocket_bridge
+Description: Description of ros_websocket_bridge
+Version: 0.0.1
+Cflags: -I/home/xi/workspace/terrain_classifier/preprocessor/devel/include
+Libs: -L/home/xi/workspace/terrain_classifier/preprocessor/devel/lib 
+Requires: 
