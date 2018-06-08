@@ -27,8 +27,8 @@ TF_L = []
 bridge = CvBridge()
 
 print('loading model.....')
-clf = pickle.load(open('/home/xi/workspace/terrain_classifier/tc_model.pickle', 'rb'))
-scaler = pickle.load(open('/home/xi/workspace/terrain_classifier/tc_model_scaler.pickle', 'rb'))
+clf = pickle.load(open('/home/centauro/terrain_classifier/tc_model.pickle', 'rb'))
+scaler = pickle.load(open('/home/centauro/terrain_classifier/tc_model_scaler.pickle', 'rb'))
 print('loaded')
 
 def publish_cloud(cloud, frame_id, publisher):
