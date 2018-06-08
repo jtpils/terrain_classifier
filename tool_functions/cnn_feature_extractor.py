@@ -6,7 +6,7 @@ import scipy as sp
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
-path = '/home/xi/workspace/catkin_centauro/src/fused_terrain_classifier/src/vision' #os.getcwd()
+path = '/home/centauro/terrain_classifier/vision' #os.getcwd()
 sys.path.append(path + '/segmentation/')
 sys.path.append(path + '/segmentation/datasets/')
 sys.path.append(path + '/segmentation/models')

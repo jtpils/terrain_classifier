@@ -22,7 +22,7 @@ Map_resolution = 0.05
 Map_r = Map_W/Map_resolution
 Map_c = Map_B/Map_resolution
 
-pcl_pub, terrainmap_pub = [], []
+pcl_pub, terrainmap_pub, pred_img_pub = [], [], []
 TF_L = []
 bridge = CvBridge()
 
@@ -135,9 +135,14 @@ def classify_features(features_map, rgb_img):
                     cv2.circle(rgb_img, (col, row), 3, (0, 255, 255), -1)  
                 if label_pred == 1: #safe
                     cv2.circle(rgb_img, (col, row), 3, (0, 255, 0), -1) 
-                
-    cv2.imshow('label', rgb_img)
-    cv2.waitKey(10)
+    
+    try:
+        pred_img_pub.publish(bridge.cv2_to_imgmsg(rgb_img, "bgr8"))
+    except:
+        print('image publish failed')
+
+    #cv2.imshow('label', rgb_img)
+    #cv2.waitKey(10)
 
     return label_pred_reshaped
 
@@ -182,7 +187,6 @@ def build_terrain_map(label_img, resolution, robot_x, robot_y, cloud, trans_to_m
 
 def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
 # def callback(image_msg, cloud_msg):
-
     image = bridge.imgmsg_to_cv2(image_msg)
     # cv2.imshow('ori_img', image)
     # cv2.waitKey(10)
@@ -197,11 +201,12 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
         translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', cloud_msg.header.frame_id, cloud_msg.header.stamp)
         trans_to_kinect = TF_L.fromTranslationRotation(translation, rotation)
         translation_tomap,rotation_tomap = TF_L.lookupTransform('map', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+        trans_to_map = TF_L.fromTranslationRotation(translation_tomap, rotation_tomap)
+
         print(translation_tomap)
     except:
         print('tf failed')
         return
-    trans_to_map = TF_L.fromTranslationRotation(translation_tomap, rotation_tomap)
 
     # ----------------- 1. get point cloud
     # print(cloud_data[-1], normal_data[-1], roughness_data[-1])
@@ -239,8 +244,8 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     # print(hakan_res)
     print('     done', time.time() - t_temp)
     t_temp = time.time()
-    cv2.imshow('label_stair', h_label_img)
-    cv2.waitKey(10)
+    #cv2.imshow('label_stair', h_label_img)
+    #cv2.waitKey(10)
 
     # folder_path = '/home/xi/centauro_img/'
     # label_path = folder_path + 'stairs_universitetet_3_0000' + '.tiff'
@@ -259,24 +264,30 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     label_ground = project_to_ground(label_pred, hdiff_cloud, uvdh_rc, hdiff_cloud.shape)
     print('     done', time.time() - t_temp)
     t_temp = time.time()
-    show_img(label_ground, 'label_test', 10)
+    # show_img(label_ground, 'label_test', 10)
 
     terrain_map = build_terrain_map(label_ground, Map_resolution, translation_tomap[0], translation_tomap[1], cloud_in_cam, trans_to_map)
     # header = std_msgs.msg.Header()
     # header.stamp = rospy.Time.now()   
     # header.frame_id = 'map' 
-    terrain_map.header = cloud_msg.header
-    terrainmap_pub.publish(terrain_map)
-    print('####################################################')
 
-    # #header
-    header = std_msgs.msg.Header()
-    header.stamp = rospy.Time.now()
-    header.frame_id = cloud_msg.header.frame_id #'base_link_oriented'
-    scaled_polygon_pcl = pc2.create_cloud_xyz32(header, cloud_in_cam)
-    pcl_pub.publish(scaled_polygon_pcl)  
+    try:
+        terrain_map.header = cloud_msg.header
+        terrain_map.header.seq = 0
+        terrainmap_pub.publish(terrain_map)
+
+        # #header
+        header = std_msgs.msg.Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = cloud_msg.header.frame_id #'base_link_oriented'
+        scaled_polygon_pcl = pc2.create_cloud_xyz32(header, cloud_in_cam)
+        pcl_pub.publish(scaled_polygon_pcl)
+    except:
+        print('Cannot publish ros messages...')
+        return
+
     print('done!', time.time() - t_s)
-
+    print('####################################################')
 
 def callback_one(normal_msg):
     # print(cloud_data[-1], normal_data[-1], roughness_data[-1])
@@ -284,7 +295,7 @@ def callback_one(normal_msg):
         print(data)
 
 def main(args):
-    global pcl_pub, terrainmap_pub, TF_L
+    global pcl_pub, terrainmap_pub, TF_L, pred_img_pub
     rospy.init_node('classify_terrain', anonymous=True)
 
     TF_L = ros_tf.TransformListener()
@@ -298,36 +309,14 @@ def main(args):
     # info_sub = message_filters.Subscriber('camera_info', CameraInfo)
 
     # ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub], 1, 500)
-    ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub, nromal_sub, roughness_sub], 1, 10000)
+    ts = message_filters.ApproximateTimeSynchronizer([image_sub, cloud_sub, nromal_sub, roughness_sub], 1, 100)
     ts.registerCallback(callback)
 
     pcl_pub = rospy.Publisher('cloud_test', PointCloud2, queue_size=1)
+    pred_img_pub = rospy.Publisher('/terrain_classifier/prediction_image', rosimg, queue_size=1)
     terrainmap_pub = rospy.Publisher('/centauro_map_client/terrain_map_kth', TerrainClassMap, queue_size=1)
 
     rospy.spin()
-
-    # listener = ros_tf.TransformListener()
-    # broadcaster = ros_tf.TransformBroadcaster()
-
-    # # cloud preprocessing
-    # pcl_cloud, kinect_cloud = pre_process_cloud(msg_map, msg_kcloud, Map_W/2, Map_B/2, Map_resolution)
-
-    # cloud_kinect, cloud_icp = rotate_map_cloud(pcl_cloud, kinect_cloud)
-    # publish_cloud(cloud_icp, 'kinect2_rgb_optical_frame', pcl_pub)   
-    # publish_cloud(kinect_cloud, 'kinect2_rgb_optical_frame', pcl_pub_k)           
-    # # publish_cloud(cloud_kinect, 'kinect2_rgb_optical_frame', pcl_pub)   
-
-    # hdiff_img, slope_img, roughness_img, obs_rgb, point_row_col = compute_geometric_features(pcl_cloud, Map_W, Map_B, Map_resolution)
-    # feature_vision = predice_image(msg_img)
-
-    # # get point uv
-    # uvdh_rc, cloud_in_cam = get_cloud_uv(pcl_cloud, cloud_kinect, point_row_col)
-    # save_all_features(hdiff_img, slope_img, roughness_img, obs_rgb, uvdh_rc, feature_vision)
-
-    # cv2.waitKey(0)
-
-    # print('finish all rosbags')
-    # rospy.spin()
 
 if __name__ == '__main__':
     main(sys.argv)
