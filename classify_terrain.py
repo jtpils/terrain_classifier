@@ -27,8 +27,11 @@ TF_L = []
 bridge = CvBridge()
 
 print('loading model.....')
-clf = pickle.load(open('/home/centauro/terrain_classifier/tc_model.pickle', 'rb'))
-scaler = pickle.load(open('/home/centauro/terrain_classifier/tc_model_scaler.pickle', 'rb'))
+# clf = pickle.load(open('/home/centauro/terrain_classifier/tc_model.pickle', 'rb'))
+# scaler = pickle.load(open('/home/centauro/terrain_classifier/tc_model_scaler.pickle', 'rb'))
+clf = pickle.load(open('/home/xi/workspace/terrain_classifier/tc_model.pickle', 'rb'))
+scaler = pickle.load(open('/home/xi/workspace/terrain_classifier/tc_model_scaler.pickle', 'rb'))
+
 print('loaded')
 
 def publish_cloud(cloud, frame_id, publisher):
@@ -203,6 +206,8 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
         translation_tomap,rotation_tomap = TF_L.lookupTransform('map', cloud_msg.header.frame_id, cloud_msg.header.stamp)
         trans_to_map = TF_L.fromTranslationRotation(translation_tomap, rotation_tomap)
 
+        robot_x, robot_y = translation_tomap[0], translation_tomap[1]
+
         print(translation_tomap)
     except:
         print('tf failed')
@@ -211,7 +216,8 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     # ----------------- 1. get point cloud
     # print(cloud_data[-1], normal_data[-1], roughness_data[-1])
     for data in pc2.read_points(cloud_msg, skip_nans=False):
-        points_list.append([data[0], data[1], data[2]])
+        p_map_trans = np.dot(trans_to_map, np.array([data[0], data[1], data[2], 1.0]))[:3]
+        points_list.append([p_map_trans[0] - robot_x, p_map_trans[1] - robot_y, p_map_trans[2]])
     print('     loaded data', time.time() - t_s)
     t_temp = time.time()
 
@@ -244,8 +250,8 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     # print(hakan_res)
     print('     done', time.time() - t_temp)
     t_temp = time.time()
-    #cv2.imshow('label_stair', h_label_img)
-    #cv2.waitKey(10)
+    # cv2.imshow('label_stair', h_label_img)
+    # cv2.waitKey(10)
 
     # folder_path = '/home/xi/centauro_img/'
     # label_path = folder_path + 'stairs_universitetet_3_0000' + '.tiff'
@@ -255,7 +261,14 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     # get point uv
     print('       prediting labels')
     uvdh_rc, cloud_in_cam, features_map = get_feature_map(cloud_filtered, point_row_col, trans_to_kinect, hdiff_cloud, slope_cloud, roughness_cloud, feature_vision, h_label_img)
+    
+    # index = 29
+    # np.save('/home/xi/workspace/bonn_features/'+str(index), features_map)
+    # cv2.imwrite('/home/xi/workspace/bonn_features/'+str(index)+'_img.png', image)    
+    
     label_pred = classify_features(features_map, image)
+    cv2.imwrite('/home/xi/workspace/bonn_features/' + 'test_pred.png', image)    
+
     print('     done', time.time() - t_temp)
     t_temp = time.time()
 
@@ -274,12 +287,13 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     try:
         terrain_map.header = cloud_msg.header
         terrain_map.header.seq = 0
+        terrain_map.header.frame_id = 'map'
         terrainmap_pub.publish(terrain_map)
 
         # #header
         header = std_msgs.msg.Header()
         header.stamp = rospy.Time.now()
-        header.frame_id = cloud_msg.header.frame_id #'base_link_oriented'
+        header.frame_id = 'map'#cloud_msg.header.frame_id #'base_link_oriented'
         scaled_polygon_pcl = pc2.create_cloud_xyz32(header, cloud_in_cam)
         pcl_pub.publish(scaled_polygon_pcl)
     except:
