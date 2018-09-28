@@ -6,7 +6,9 @@ import scipy as sp
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
-path = '/home/centauro/terrain_classifier/vision' #os.getcwd()
+# path = '/home/centauro/terrain_classifier/vision' #os.getcwd()
+path = '/home/xi/workspace/catkin_centauro/src/fused_terrain_classifier/src/vision' #os.getcwd()
+
 sys.path.append(path + '/segmentation/')
 sys.path.append(path + '/segmentation/datasets/')
 sys.path.append(path + '/segmentation/models')
@@ -63,9 +65,8 @@ def predice_image(img_msg):
     # image_message = bridge.cv2_to_imgmsg(prediction_label)
     # label_pub.publish(image_message)
 
-    # cv2.imshow("prediction_label", prediction_label)
-    # cv2.imshow("prediction_label", prediction_label)
-    # cv2.waitKey(0)
+    #cv2.imshow("prediction_label", prediction_label)
+    #cv2.waitKey(0)
 
     # prediction_label = prediction_label[..., ::-1] # rgb to bgr
     # prediction_publisher.publish(bridge.cv2_to_imgmsg(prediction_label))

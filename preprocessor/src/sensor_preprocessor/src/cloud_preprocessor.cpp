@@ -10,8 +10,8 @@
 
 using namespace std;
 
-float Map_W = 20;
-float Map_B = 20;
+float Map_W = 15;
+float Map_B = 15;
 float Map_resolution = 0.05;
 
 ros::Publisher _pub_cloud, _pub_normal, _pub_don;
@@ -60,7 +60,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filter(pcl::PointCloud<pcl::PointXYZ>:
     pcl::PassThrough<pcl::PointXYZ> pass;
     pass.setInputCloud (input_cloud);
     pass.setFilterFieldName ("x");
-    pass.setFilterLimits (0, Map_W/2);
+    pass.setFilterLimits (1.5, Map_W/2);
     pass.filter (*input_cloud);
     // cout << "after x filter  " << cloud_passthrough->points.size() << endl;
 
@@ -72,12 +72,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filter(pcl::PointCloud<pcl::PointXYZ>:
 
     pass.setInputCloud (input_cloud);
     pass.setFilterFieldName ("z");
-    pass.setFilterLimits (-Map_W/2, Map_W/2);
+    pass.setFilterLimits (-2, 2);
     pass.filter (*input_cloud);
 
     pcl::VoxelGrid<pcl::PointXYZ> sor;
     sor.setInputCloud (input_cloud);
-    sor.setLeafSize (Map_resolution*0.8, Map_resolution*0.8, Map_resolution*0.8);
+    sor.setLeafSize (Map_resolution, Map_resolution, Map_resolution);
     sor.filter (*input_cloud);
     // cout << "after filter  " << input_cloud->points.size() << endl;
     return input_cloud;
@@ -102,8 +102,8 @@ void callback_cloud(const sensor_msgs::PointCloud2ConstPtr &cloud_in)
     // 2. compute normals
     pcl::PointCloud<pcl::PointNormal>::Ptr       normal_large        (new pcl::PointCloud<pcl::PointNormal>);
     pcl::PointCloud<pcl::PointNormal>::Ptr       normal_small        (new pcl::PointCloud<pcl::PointNormal>);
-    normal_large = calculateSurfaceNormal(cloud_filtered, pcl_cloud_in, Map_resolution*4);
-    normal_small = calculateSurfaceNormal(cloud_filtered, pcl_cloud_in, Map_resolution);
+    normal_large = calculateSurfaceNormal(cloud_filtered, pcl_cloud_in, 0.5);
+    normal_small = calculateSurfaceNormal(cloud_filtered, pcl_cloud_in, 0.2);
 
     // 3. compute don
     pcl::PointCloud<pcl::PointNormal>::Ptr       doncloud (new pcl::PointCloud<pcl::PointNormal>);
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
 
     image_transport::ImageTransport it(node);
     image_transport::Subscriber sub_raw = it.subscribe("/kinect2/qhd/image_color", 1, imageCallback);
-    ros::Subscriber sub_cloud = node.subscribe<sensor_msgs::PointCloud2>("/mapping_nodelet/pointcloud_cut", 1, callback_cloud);
+    ros::Subscriber sub_cloud = node.subscribe<sensor_msgs::PointCloud2>("/map_nodelet/pointcloud_cut", 1, callback_cloud);
     
     // _pub_cloud = node.advertise<sensor_msgs::PointCloud2> ("/terrain_classifier/preprocessed/cloud", 1);
     // _pub_normal = node.advertise<sensor_msgs::PointCloud2> ("/terrain_classifier/preprocessed/normal", 1);

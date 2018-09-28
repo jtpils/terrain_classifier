@@ -38,8 +38,9 @@ def filter_cloud_by_minh(cloud):
     init_h = 0
     scale = 0.3
     min_img = np.full((int(Map_W/Map_resolution), int(Map_B/Map_resolution)), init_h, np.float32)
-    min_img_small = np.full((int(Map_W/Map_resolution * scale), int(Map_B/Map_resolution * scale)), init_h, np.float32)
-    
+    min_img_small = np.full((int(Map_W/Map_resolution * scale), int(Map_B/Map_resolution * scale)), 10, np.float32)
+    max_img_small = np.full((int(Map_W/Map_resolution * scale), int(Map_B/Map_resolution * scale)), -10, np.float32)
+
     point_row_col_ori = []
     point_row_col = []
     point_row_col_small = []
@@ -71,6 +72,10 @@ def filter_cloud_by_minh(cloud):
         if value_small_pre > p[2]:
             min_img_small[row_small, col_small] = p[2]
 
+        value_small_pre = max_img_small[row_small, col_small]
+        if value_small_pre < p[2]:
+            max_img_small[row_small, col_small] = p[2]
+
     # extract hight difference
     max_img_f = np.full((int(Map_W/Map_resolution), int(Map_B/Map_resolution)), init_h, np.float32)
     min_img_f = np.full((int(Map_W/Map_resolution), int(Map_B/Map_resolution)), init_h, np.float32)
@@ -84,11 +89,12 @@ def filter_cloud_by_minh(cloud):
     for p, (row, col), (row_small, col_small) in zip(point_in_map, point_row_col, point_row_col_small):
         # min_value = min_img[row, col]
         min_value_small = min_img_small[row_small, col_small]
+        max_value_small = max_img_small[row_small, col_small]
 
         n_row = int((p[0]+Map_W/2)/Map_resolution)
         n_col = int((p[1]+Map_W/2)/Map_resolution)
 
-        if p[2] < min_value_small + 1:
+        if p[2] > max_value_small - 0.05:
             filtered_cloud.append(p)
             point_row_col_f.append((row, col))
 
@@ -176,9 +182,10 @@ def get_slope_roughness_img(cloud_filtered, point_row_col, normal_big, roughness
     slope_img = np.full((int(Map_W/Map_resolution), int(Map_B/Map_resolution)), -1, np.float32)
     roughness_img = np.full((int(Map_W/Map_resolution), int(Map_B/Map_resolution)), -1, np.float32)
     
-    if normal_big == [] or roughness == []:
-        normal_big = compute_normal(cloud_filtered, Map_resolution*6.5)
-        normal_small = compute_normal(cloud_filtered, Map_resolution*1.5)
+#    if normal_big == [] or roughness == [] or False:
+    if True:
+        normal_big = compute_normal(cloud_filtered, 0.5)
+        normal_small = compute_normal(cloud_filtered, 0.2)
         cloud_roughness = abs(abs(normal_big - abs(normal_small)))
     else:
         print('skip normal')

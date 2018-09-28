@@ -26,6 +26,10 @@ pcl_pub, terrainmap_pub, pred_img_pub = [], [], []
 TF_L = []
 bridge = CvBridge()
 
+map_frame = 'map'
+
+index_count = 0
+
 print('loading model.....')
 # clf = pickle.load(open('/home/centauro/terrain_classifier/tc_model.pickle', 'rb'))
 # scaler = pickle.load(open('/home/centauro/terrain_classifier/tc_model_scaler.pickle', 'rb'))
@@ -51,13 +55,13 @@ def publish_msg(msg, frame_id, publisher):
     publisher.publish(msg)   
 
 def get_uv_from_xyz(x, y, z):
-    fx, fy, cx, cy = 540.68603515625, 540.68603515625, 479.75, 269.75
-
+    #fx, fy, cx, cy = 540.68603515625, 540.68603515625, 479.75, 269.75
+    fx, fy, cx, cy = 537.7857315128306, 495.0493991064229,  536.6644780337745, 270.7303441577011
     u = (fx*x) / z + cx
     v = (fy*y) / z + cy
     return u, v
 
-def get_feature_map(cloud_list, point_row_col, trans_to_kinect, hd_cloud, slope_cloud, roughness_cloud, feature_vision, h_label_img):
+def get_feature_map(cloud_list, point_row_col, trans_to_kinect, hd_cloud, slope_cloud, roughness_cloud, feature_vision, h_label_img, robot_x, robot_y):
     # mat44 = get_transform_matrix('kinect2_rgb_optical_frame', cloud_header.frame_id, camera_header.stamp) # get transform matrix
 
     point_image, uvdh_rc = [], []
@@ -70,13 +74,14 @@ def get_feature_map(cloud_list, point_row_col, trans_to_kinect, hd_cloud, slope_
     scale_col = cnn_img_size[2]/float(features_map.shape[1])
 
     for p, (row, col) in zip(cloud_list, point_row_col):
+        p[0] = p[0] + robot_x
+        p[1] = p[1] + robot_y
         p_k = np.dot(trans_to_kinect, np.array([p[0], p[1], p[2], 1.0]))[:3]
         if p_k[2] < 1:
             continue
         u, v = get_uv_from_xyz(p_k[0], p_k[1], p_k[2])
         if u < 0 or u >= 960 or v < 0 or v >= 540:
             continue
-
         point_image.append(p)
         dist = math.sqrt(p_k[0]*p_k[0] + p_k[1]*p_k[1] + p_k[2]*p_k[2])
         uvdh_rc.append([u, v, dist, p[2], row, col])
@@ -85,7 +90,10 @@ def get_feature_map(cloud_list, point_row_col, trans_to_kinect, hd_cloud, slope_
         dist_pre = min_dist_img[v, u]
         if dist_pre == 0 or dist < dist_pre:
             min_dist_img[v, u] = dist
+            cv2.circle(min_dist_img, (u, v), 10, dist, -1) 
 
+    #cv2.imshow('label_test', min_dist_img)
+    #cv2.waitKey(0)
 
     for (u, v, dist, height, row, col) in uvdh_rc:
         u, v, row, col = int(u), int(v), int(row), int(col)
@@ -104,17 +112,15 @@ def get_feature_map(cloud_list, point_row_col, trans_to_kinect, hd_cloud, slope_
         u_cnn = int(u*scale_col)
         features_map[v, u, 5:39] = feature_vision[0, v_cnn, u_cnn, :]
 
+        
         # print(v, u, features_map[v, u])
     # show_img(label_ground, 'label_test', 0)
-
-    # cv2.imshow('label_test', label_ground)
-    # cv2.waitKey(0)
-
+    #features_map = features_map[:,:,1:]
     return uvdh_rc, point_image, features_map
 
 
 def classify_features(features_map, rgb_img):
-    # rgb_img = np.full((540, 960, 3), 0, np.uint8)
+    predict_img = np.full((features_map.shape[0], features_map.shape[1]), 0, np.uint8)
 
     features_map_reshape = features_map.reshape((features_map.shape[0]*features_map.shape[1], features_map.shape[2]))
     feature_nromalized = scaler.transform(features_map_reshape)
@@ -125,18 +131,19 @@ def classify_features(features_map, rgb_img):
 
     for row in range(features_map.shape[0]):
         for col in range(features_map.shape[1]):
-            label_pred = label_pred_reshaped[row, col]
+            label_index = label_pred_reshaped[row, col]
             
             if features_map[row, col, 0] != -1:
-                if label_pred == 5: #narrow passage
+                predict_img[row, col] = label_pred_reshaped[row, col]
+                if label_index == 5: #narrow passage
                     cv2.circle(rgb_img, (col, row), 3, (255, 255, 0), -1)                
-                if label_pred == 4: #stair
+                if label_index == 4: #stair
                     cv2.circle(rgb_img, (col, row), 3, (255, 255, 0), -1)
-                if label_pred == 3: #obs
+                if label_index == 3: #obs
                     cv2.circle(rgb_img, (col, row), 3, (0, 0, 255), -1)     
-                if label_pred == 2: #rough
+                if label_index == 2: #rough
                     cv2.circle(rgb_img, (col, row), 3, (0, 255, 255), -1)  
-                if label_pred == 1: #safe
+                if label_index == 1: #safe
                     cv2.circle(rgb_img, (col, row), 3, (0, 255, 0), -1) 
     
     try:
@@ -147,20 +154,38 @@ def classify_features(features_map, rgb_img):
     #cv2.imshow('label', rgb_img)
     #cv2.waitKey(10)
 
-    return label_pred_reshaped
+    return predict_img #abel_pred_reshaped
 
 
 def project_to_ground(label_cam, highdiff_img, uvdh_rc, shape):
 
-    label_ground = np.zeros(shape)
+    label_ground = np.zeros(shape, np.uint8)
+
+    label_1 = np.zeros(shape, np.uint8)
+    label_2 = np.zeros(shape, np.uint8)
+    label_3 = np.zeros(shape, np.uint8)
 
     for (u, v, dist, height, row, col) in uvdh_rc:
         u, v, row, col = int(u), int(v), int(row), int(col)
 
-        if highdiff_img[row, col] != -1:
+        #if highdiff_img[row, col] != -1:
+        if label_cam[v, u] != 0:
             label_ground[row, col] = label_cam[v, u]
         else:
             label_ground[row, col] = 0
+
+        if label_cam[v, u] == 1:
+            label_1[row, col] = 50
+        if label_cam[v, u] == 2:
+            label_2[row, col] = 100
+        if label_cam[v, u] == 3:
+            label_3[row, col] = 150
+
+#    cv2.imshow('label_1', label_1)
+#    cv2.imshow('label_2', label_2)
+#    cv2.imshow('label_3', label_3)
+#    cv2.imshow('label_3', label_ground*50)
+#    cv2.waitKey(0)
 
     return label_ground
 
@@ -188,7 +213,9 @@ def build_terrain_map(label_img, resolution, robot_x, robot_y, cloud, trans_to_m
     return terrain_map
 
 
+#def callback(image_msg, cloud_msg):
 def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
+    global index_count
 # def callback(image_msg, cloud_msg):
     image = bridge.imgmsg_to_cv2(image_msg)
     # cv2.imshow('ori_img', image)
@@ -201,16 +228,22 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     print('message in', cloud_msg.header.stamp, image_msg.header.stamp)
 
     try:
-        translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+        #translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+        #translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', map_frame, cloud_msg.header.stamp)
+        t = TF_L.getLatestCommonTime('kinect2_rgb_optical_frame', map_frame)
+        translation,rotation = TF_L.lookupTransform('kinect2_rgb_optical_frame', map_frame, t)
         trans_to_kinect = TF_L.fromTranslationRotation(translation, rotation)
-        translation_tomap,rotation_tomap = TF_L.lookupTransform('map', cloud_msg.header.frame_id, cloud_msg.header.stamp)
+
+        t = TF_L.getLatestCommonTime(map_frame, cloud_msg.header.frame_id)
+        translation_tomap,rotation_tomap = TF_L.lookupTransform(map_frame, cloud_msg.header.frame_id, t)
         trans_to_map = TF_L.fromTranslationRotation(translation_tomap, rotation_tomap)
 
         robot_x, robot_y = translation_tomap[0], translation_tomap[1]
 
         print(translation_tomap)
-    except:
-        print('tf failed')
+    except Exception as ex:
+	print(str(ex))
+        print('tf failed', )
         return
 
     # ----------------- 1. get point cloud
@@ -250,8 +283,8 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     # print(hakan_res)
     print('     done', time.time() - t_temp)
     t_temp = time.time()
-    # cv2.imshow('label_stair', h_label_img)
-    # cv2.waitKey(10)
+    #cv2.imshow('label_stair', h_label_img*255)
+    #cv2.waitKey(0)
 
     # folder_path = '/home/xi/centauro_img/'
     # label_path = folder_path + 'stairs_universitetet_3_0000' + '.tiff'
@@ -260,11 +293,11 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
 
     # get point uv
     print('       prediting labels')
-    uvdh_rc, cloud_in_cam, features_map = get_feature_map(cloud_filtered, point_row_col, trans_to_kinect, hdiff_cloud, slope_cloud, roughness_cloud, feature_vision, h_label_img)
+    uvdh_rc, cloud_in_cam, features_map = get_feature_map(cloud_filtered, point_row_col, trans_to_kinect, hdiff_cloud, slope_cloud, roughness_cloud, feature_vision, h_label_img, robot_x, robot_y)
     
-    # index = 29
-    # np.save('/home/xi/workspace/bonn_features/'+str(index), features_map)
-    # cv2.imwrite('/home/xi/workspace/bonn_features/'+str(index)+'_img.png', image)    
+    index_count = 5
+    #np.save('/home/xi/workspace/iit_features/'+str(index_count), features_map)
+    #cv2.imwrite('/home/xi/workspace/iit_features/'+str(index_count)+'_img.jpg', image)    
     
     label_pred = classify_features(features_map, image)
     cv2.imwrite('/home/xi/workspace/bonn_features/' + 'test_pred.png', image)    
@@ -277,23 +310,29 @@ def callback(image_msg, cloud_msg, normal_msg, roughness_msg):
     label_ground = project_to_ground(label_pred, hdiff_cloud, uvdh_rc, hdiff_cloud.shape)
     print('     done', time.time() - t_temp)
     t_temp = time.time()
-    # show_img(label_ground, 'label_test', 10)
+    kernel = np.ones((4,4),np.uint8)
+    label_ground = cv2.dilate(label_ground,kernel,iterations = 1)
+    label_ground = cv2.medianBlur(label_ground,9)
+
+    #cv2.imshow('label_test', label_pred*50)
+    cv2.imshow('label_ground', label_ground*50)
+    cv2.waitKey(0)
 
     terrain_map = build_terrain_map(label_ground, Map_resolution, translation_tomap[0], translation_tomap[1], cloud_in_cam, trans_to_map)
     # header = std_msgs.msg.Header()
     # header.stamp = rospy.Time.now()   
-    # header.frame_id = 'map' 
+    # header.frame_id = map_frame
 
     try:
         terrain_map.header = cloud_msg.header
         terrain_map.header.seq = 0
-        terrain_map.header.frame_id = 'map'
+        terrain_map.header.frame_id = map_frame
         terrainmap_pub.publish(terrain_map)
 
         # #header
         header = std_msgs.msg.Header()
         header.stamp = rospy.Time.now()
-        header.frame_id = 'map'#cloud_msg.header.frame_id #'base_link_oriented'
+        header.frame_id = map_frame #cloud_msg.header.frame_id #'base_link_oriented'
         scaled_polygon_pcl = pc2.create_cloud_xyz32(header, cloud_in_cam)
         pcl_pub.publish(scaled_polygon_pcl)
     except:
